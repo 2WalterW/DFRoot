@@ -1,0 +1,55 @@
+name: Build DFRoot APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out reviewed upstream source
+        uses: actions/checkout@v4
+        with:
+          repository: diabl0w/DFRoot
+          ref: 3a6964aadc5586802caeb77d2f4de54df3528c5e
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build dependencies
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "ndk;27.0.12077973" "cmake;3.22.1"
+
+      - name: Set up Gradle compatible with AGP 8.7.3
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build APK
+        run: gradle --no-daemon :app:assembleRelease --stacktrace
+
+      - name: Record source and APK checksum
+        working-directory: app/build/outputs/apk/release
+        run: |
+          git rev-parse HEAD > SOURCE_COMMIT.txt
+          sha256sum dirtyfrag.apk > SHA256SUMS.txt
+
+      - name: Upload APK and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: DFRoot-3a6964a-arm64
+          path: |
+            app/build/outputs/apk/release/dirtyfrag.apk
+            app/build/outputs/apk/release/SHA256SUMS.txt
+            app/build/outputs/apk/release/SOURCE_COMMIT.txt
+          if-no-files-found: error
+          retention-days: 14
