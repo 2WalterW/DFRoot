@@ -21,10 +21,10 @@ jobs:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
       - name: Install Android build dependencies
-        run: sdkmanager "platforms;android-37" "build-tools;37.0.0" "cmake;3.22.1"
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "cmake;3.22.1"
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '9.7.1'
+          gradle-version: '8.9'
       - name: Configure persistent signing
         env:
           KEYSTORE_B64: ${{ secrets.DFROOT_KEYSTORE }}
@@ -33,14 +33,32 @@ jobs:
           umask 077
           printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/dfroot-release.p12"
           printf 'KEYSTORE_FILE=%s\nKEYSTORE_PASSWORD=%s\nKEY_ALIAS=dfroot\nKEY_PASSWORD=%s\n' "$RUNNER_TEMP/dfroot-release.p12" "$STORE_PASSWORD" "$STORE_PASSWORD" > signing.properties
+      - name: Adapt unavailable upstream SDK to supported toolchain
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('build.gradle.kts')
+          p.write_text(p.read_text().replace('version "9.4.0"','version "8.7.3"'))
+          p=Path('app/build.gradle.kts')
+          s=p.read_text().replace('compileSdk = 37','compileSdk = 36').replace('targetSdk = 37','targetSdk = 36')
+          a=s.index('androidComponents {'); b=s.index('\ndependencies {',a)
+          s=s[:a]+'''android.applicationVariants.all {
+              outputs.all {
+                  (this as com.android.build.gradle.internal.api.BaseVariantOutputImpl).outputFileName = "DFRoot_4.1.apk"
+              }
+          }
+          '''+s[b:]
+          p.write_text(s)
+          PY
       - name: Build APK
         run: gradle --no-daemon :app:assembleRelease --stacktrace
       - name: Verify and record provenance
         run: |
           mkdir -p delivery
           cp app/build/outputs/apk/release/DFRoot_4.1.apk delivery/
-          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --verbose --print-certs delivery/DFRoot_4.1.apk > delivery/APK-SIGNATURE.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs delivery/DFRoot_4.1.apk > delivery/APK-SIGNATURE.txt
           git rev-parse HEAD > delivery/SOURCE_COMMIT.txt
+          git diff -- build.gradle.kts app/build.gradle.kts > delivery/BUILD-COMPATIBILITY.patch
           cd delivery
           sha256sum DFRoot_4.1.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
