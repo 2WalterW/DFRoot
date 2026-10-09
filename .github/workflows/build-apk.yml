@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -50,6 +51,15 @@ jobs:
           '''+s[b:]
           p.write_text(s)
           PY
+      - name: Download matching upstream kernel modules
+        uses: actions/download-artifact@v4
+        with:
+          repository: diabl0w/DFRoot
+          run-id: 37840730086
+          github-token: ${{ github.token }}
+          pattern: df-lkm-*
+          merge-multiple: true
+          path: app/src/main/jni/ko/
       - name: Build APK
         run: gradle --no-daemon :app:assembleRelease --stacktrace
       - name: Verify and record provenance
@@ -58,6 +68,7 @@ jobs:
           cp app/build/outputs/apk/release/DFRoot_4.1.apk delivery/
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs delivery/DFRoot_4.1.apk > delivery/APK-SIGNATURE.txt
           git rev-parse HEAD > delivery/SOURCE_COMMIT.txt
+          echo "diabl0w/DFRoot Actions 37840730086, source 209867fbb4059140cf474e4fa9b2ea57575a2ce1" > delivery/KERNEL-MODULE-SOURCE.txt
           git diff -- build.gradle.kts app/build.gradle.kts > delivery/BUILD-COMPATIBILITY.patch
           cd delivery
           sha256sum DFRoot_4.1.apk > SHA256SUMS.txt
